@@ -1,0 +1,236 @@
+<html>
+  <head>
+    <script src="./d3.min.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="content" id="container">
+      <h1 id="title" class="title">Video Game Sales</h1>
+      <p id="description">Top 100 Most Sold Video Games Grouped by Platform</p>
+      <select id="select"></select>
+
+      <script>
+        const colors = [
+          "#FFA07A", // Light Salmon
+          "#87CEFA", // Light Sky Blue
+          "#90EE90", // Light Green
+          "#FFD700", // Gold
+          "#32CD32", // Lime Green
+          "#FF6347", // Tomato
+          "#00BFFF", // Deep Sky Blue
+          "#FF8C00", // Dark Orange
+          "#40E0D0", // Turquoise
+          "#FF69B4", // Hot Pink
+          "#8A2BE2", // Blue Violet
+          "#DC143C", // Crimson
+          "#7B68EE", // Medium Slate Blue
+          "#00FA9A", // Medium Spring Green
+          "#FF4500", // Orange Red
+          "#9370DB", // Medium Purple
+          "#00CED1", // Dark Turquoise
+          "#B22222", // Fire Brick
+          "#6A5ACD", // Slate Blue
+          "#00FF7F", // Spring Green
+        ];
+
+        function onMouseOver() {
+          const element = event.target;
+          const className = element.getAttribute("class");
+          if (className == "tile") {
+            const name = element.getAttribute("data-name");
+            const category = element.getAttribute("data-category");
+            const value = element.getAttribute("data-value");
+
+            tooltip.setAttribute("data-value", value);
+            tooltip.innerHTML = `<p>Name: ${name}</p><p>Category: ${category}</p><p>value: ${value}</p>`;
+
+            tooltip.style.left = event.pageX + 20;
+            tooltip.style.top = event.pageY + 20;
+
+            tooltip.style.opacity = "0.9";
+          } else {
+            tooltip.style.opacity = "0";
+          }
+        }
+
+        function onMouseOut() {
+          tooltip.style.opacity = "0";
+        }
+
+        const datasets = [
+          {
+            title: "Kickstarter Pledges",
+            description:
+              "Kickstarter Pledges Grouped by different categories of products",
+            url: "https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/kickstarter-funding-data.json",
+          },
+          {
+            title: "Movie Sales",
+            description: "Movie Sales Grouped by genres",
+            url: "https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/movie-data.json",
+          },
+          {
+            title: "Video Game Sales",
+            description: "Top 100 Most Sold Video Games Grouped by Platform",
+            url: "https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/video-game-sales-data.json",
+          },
+        ];
+
+        datasets.forEach((i, index) => {
+          var option = document.createElement("option");
+          option.text = i.title;
+          option.value = index;
+          select.add(option);
+        });
+
+        select.value = 2;
+
+        const w = 1024;
+        const h = 720;
+
+        (async () => {
+          const response = await Promise.all(datasets.map((i) => fetch(i.url)));
+
+          if (response.filter((i) => !i.ok).length == 0) {
+            let data = await Promise.all(
+              response.map(async (i) => await i.json())
+            );
+
+            data.map((i) => select.set);
+
+            function refresh() {
+              d3.select("#svg").remove();
+              d3.select("#tooltip").remove();
+              const svg = d3
+                .select("div")
+                .append("svg")
+                .attr("width", w)
+                .attr("height", h)
+                .attr("class", "svg")
+                .attr("id", "svg")
+                .attr("onmouseover", "onMouseOver()")
+                .attr("onmouseout", "onMouseOut()");
+
+              d3.select("div")
+                .append("div")
+                .attr("id", "tooltip")
+                .style("opacity", "0");
+
+              let dataset = data[select.value];
+              title.innerHTML = datasets[select.value].title;
+              description.innerHTML = datasets[select.value].description;
+              let categories = [];
+              dataset = {
+                ...dataset,
+                children: dataset.children
+                  .map((i) => ({
+                    ...i,
+                    sum: i.children.reduce((acc, curr) => {
+                      const category = curr.category;
+                      if (!categories.includes(category))
+                        categories.push(category);
+                      return acc + Number(curr.value);
+                    }, 0),
+                  }))
+                  .sort((a, b) => b.sum - a.sum),
+              };
+              const getColor = (category) =>
+                colors[categories.indexOf(category)];
+
+              var root = d3.hierarchy(dataset).sum(function (d) {
+                return d.value;
+              });
+              d3.treemap().size([w, h]).padding(1)(root);
+              const cell = svg.selectAll("rect").data(root.leaves()).enter();
+              cell
+                .append("rect")
+                .attr("class", "tile")
+                .attr("x", (d) => d.x0)
+                .attr("y", (d) => d.y0)
+                .attr("width", (d) => d.x1 - d.x0)
+                .attr("height", (d) => d.y1 - d.y0)
+                .attr("data-name", (d) => d.data.name)
+                .attr("data-category", (d) => d.data.category)
+                .attr("data-value", (d) => d.data.value)
+                .style("fill", (d) => getColor(d.data.category));
+
+              cell
+                .append("text")
+                .attr("class", "tile-text")
+                .attr("x", (d) => d.x0 + 2)
+                .attr("y", (d) => d.y0 + 10)
+                .selectAll("tspan")
+                .data((d) => d.data.name.split(/(?=[A-Z][^A-Z])/g))
+                .enter()
+                .append("tspan")
+                .attr("x", function (d, i) {
+                  const parent = this.parentElement;
+                  const x0 = Number(parent.getAttribute("x"));
+                  return x0;
+                })
+                .attr("y", function (d, i) {
+                  const parent = this.parentElement;
+                  const y0 = Number(parent.getAttribute("y"));
+                  return y0 + 10 * i;
+                })
+                .text(function (d) {
+                  return d;
+                });
+
+              const legendsNum = categories.length;
+              const itemsPerLine = 3;
+              const numberOfLines = Math.ceil(legendsNum / itemsPerLine);
+              const legendWidh = 20 + (itemsPerLine + 1) * 100;
+              const legendHeight = 30 + numberOfLines * 40;
+
+              d3.select("#legend").remove();
+
+              const legendSvg = d3
+                .select("div")
+                .append("div")
+                .attr("id", "legend")
+                .append("svg")
+                .attr("width", legendWidh)
+                .attr("height", legendHeight)
+                .attr("class", "legendSvg");
+
+              legendSvg
+                .selectAll("rect")
+                .data(categories)
+                .enter()
+                .append("rect")
+                .attr(
+                  "x",
+                  (d, i) => 20 + ((legendWidh - 20) / 3) * (i % itemsPerLine)
+                )
+                .attr("y", (d, i) => 30 + 40 * Math.floor(i / itemsPerLine))
+                .attr("width", 30)
+                .attr("height", 30)
+                .attr("class", "legend-item")
+                .attr("fill", (d) => getColor(d));
+
+              legendSvg
+                .selectAll("text")
+                .data(categories)
+                .enter()
+                .append("text")
+                .text((d) => d)
+                .attr(
+                  "x",
+                  (d, i) =>
+                    20 + ((legendWidh - 20) / 3) * (i % itemsPerLine) + 40
+                )
+                .attr(
+                  "y",
+                  (d, i) => 30 + 40 * Math.floor(i / itemsPerLine) + 20
+                );
+            }
+            refresh();
+            select.onchange = refresh;
+          }
+        })();
+      </script>
+      <script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+    </div>
+  </body>
+</html>
